@@ -1,22 +1,28 @@
 import { IBAN, CountryCode } from 'ibankit';
 
-type acc = {
+type account = {
   name: string;
   sum: number;
+  block: boolean;
 };
 
 export class PaymentSystem {
-  private emissAcc: acc = { name: 'BY04CBDC36029110100040000000', sum: 0 };
-  private destructionAcc: acc = {
+  private emissAcc: account = {
+    name: 'BY04CBDC36029110100040000000',
+    sum: 0,
+    block: false,
+  };
+  private destructionAcc: account = {
     name: 'BY04CBDC36029110100040000001',
     sum: 0,
+    block: false,
   };
 
-  private allAcc: acc[] = [this.emissAcc, this.destructionAcc];
+  private allAccount: account[] = [this.emissAcc, this.destructionAcc];
 
-  private findeAcc(accName: string): { acc: acc; index: number } | null {
+  private findeAcc(accName: string): { acc: account; index: number } | null {
     let accIndex: number | null = 0;
-    let acc = this.allAcc.find((item, index) => {
+    let acc = this.allAccount.find((item, index) => {
       item.name === accName ? (accIndex = index) : false;
     });
 
@@ -36,10 +42,10 @@ export class PaymentSystem {
     if (
       firstAccIndex &&
       secondAcc &&
-      this.allAcc[firstAccIndex!.index].sum >= sum
+      this.allAccount[firstAccIndex!.index].sum >= sum
     ) {
-      this.allAcc[firstAccIndex!.index].sum -= sum!;
-      this.allAcc[secondAccIndex!.index].sum += sum!;
+      this.allAccount[firstAccIndex!.index].sum -= sum!;
+      this.allAccount[secondAccIndex!.index].sum += sum!;
     }
     return;
   }
@@ -60,7 +66,7 @@ export class PaymentSystem {
 
   // получение всех счетов в формате JSON
   public getAllAcc(): void {
-    console.log(JSON.stringify(this.allAcc));
+    console.log(JSON.stringify(this.allAccount));
   }
 
   // осуществление эмисси, по добавлению на счет “эмиссии” указанной суммы
@@ -76,13 +82,13 @@ export class PaymentSystem {
       return;
     }
 
-    if (this.allAcc[acc.index].sum < sum) {
+    if (this.allAccount[acc.index].sum < sum) {
       console.log(`На счету ${accName} недостаточно средств.`);
       return;
     }
 
     this.emissAcc.sum -= sum;
-    this.allAcc[acc.index].sum -= sum;
+    this.allAccount[acc.index].sum -= sum;
   }
 
   // создание нового счета
@@ -91,7 +97,7 @@ export class PaymentSystem {
       name: IBAN.random(CountryCode.BY).toString(),
       sum: 0,
     };
-    this.allAcc.push(newAcc);
+    this.allAccount.push(newAcc);
     return JSON.stringify(newAcc);
   }
 
