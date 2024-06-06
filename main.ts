@@ -1,53 +1,63 @@
 import { IBAN, CountryCode } from 'ibankit';
 
-type account = {
+type Account = {
   name: string;
   sum: number;
   block: boolean;
 };
 
 export class PaymentSystem {
-  private emissAcc: account = {
+  private emissAccount: Account = {
     name: 'BY04CBDC36029110100040000000',
     sum: 0,
     block: false,
   };
-  private destructionAcc: account = {
+  private destructionAcc: Account = {
     name: 'BY04CBDC36029110100040000001',
     sum: 0,
     block: false,
   };
 
-  private allAccount: account[] = [this.emissAcc, this.destructionAcc];
+  private allAccounts: Map<string, Account>;
 
-  private findeAcc(accName: string): { acc: account; index: number } | null {
-    let accIndex: number | null = 0;
-    let acc = this.allAccount.find((item, index) => {
-      item.name === accName ? (accIndex = index) : false;
-    });
+  constructor() {
+    this.allAccounts = new Map();
+    this.allAccounts.set(this.emissAccount.name, this.emissAccount);
+    this.allAccounts.set(this.destructionAcc.name, this.destructionAcc);
+  }
 
-    if (!acc) return null;
+  private checkAccount(accountName: string, sum?: number): Account {
+    const account = this.allAccounts.get(accountName);
 
-    return { acc, index: accIndex };
+    if (!account) {
+      throw new Error(`ОШИБКА: Cчета ${accountName} не существует`);
+    }
+
+    if (!sum) {
+    } else if (account.sum < sum) {
+      throw new Error(`ОШИБКА: На счету ${account.name} недостаточно средств`);
+    }
+
+    if (account.block) {
+      throw new Error(`ОШИБКА: Счет ${account.name} заблокирован`);
+    }
+
+    return account;
   }
 
   private executTransaction(
-    firstAcc: string,
-    secondAcc: string,
+    firstAccountName: string,
+    secondAccountName: string,
     sum: number,
   ): void {
-    const firstAccIndex = this.findeAcc(firstAcc!);
-    const secondAccIndex = this.findeAcc(secondAcc!);
+    const firstAccount = this.checkAccount(firstAccountName, sum);
+    const secondAccount = this.checkAccount(secondAccountName, sum);
 
-    if (
-      firstAccIndex &&
-      secondAcc &&
-      this.allAccount[firstAccIndex!.index].sum >= sum
-    ) {
-      this.allAccount[firstAccIndex!.index].sum -= sum!;
-      this.allAccount[secondAccIndex!.index].sum += sum!;
-    }
-    return;
+    firstAccount.sum -= sum;
+    secondAccount.sum += sum;
+    console.log(
+      `Перевод денежных средств со счета ${firstAccount.name} на счет ${secondAccount.name} выполнен`,
+    );
   }
 
   // вывод в консоль специального номера счета для "эмиссии"
@@ -65,46 +75,46 @@ export class PaymentSystem {
   }
 
   // получение всех счетов в формате JSON
-  public getAllAcc(): void {
-    console.log(JSON.stringify(this.allAccount));
+  public getAllAccount(): void {
+    const allAccounts: Account[] = [];
+    for (let account of this.allAccounts.values()) {
+      allAccounts.push(account);
+    }
+    console.log(JSON.stringify(allAccounts));
   }
 
   // осуществление эмисси, по добавлению на счет “эмиссии” указанной суммы
   public emissAddSum(sum: number): void {
-    this.emissAcc.sum += sum;
+    this.allAccounts.get(this.emissAccount.name)!.sum += sum;
   }
 
   // осуществление отправки определенной суммы денег с указанного счета на счет “уничтожения”
-  public destruction(accName: string, sum: number): void {
-    const acc = this.findeAcc(accName);
-    if (!acc) {
-      console.log(`Счет с номером: ${accName} не найден.`);
-      return;
+  public destructionMoney(accountName: string, sum: number): void {
+    try {
+      const account = this.checkAccount(accountName, sum);
+      this.emissAccount.sum -= sum;
+      account.sum -= sum;
+    } catch (error) {
+      console.log(error.message);
     }
-
-    if (this.allAccount[acc.index].sum < sum) {
-      console.log(`На счету ${accName} недостаточно средств.`);
-      return;
-    }
-
-    this.emissAcc.sum -= sum;
-    this.allAccount[acc.index].sum -= sum;
   }
 
   // создание нового счета
-  public createNewAcc(): string {
-    const newAcc = {
+  public createNewAccount(): Account {
+    const newAccount: Account = {
       name: IBAN.random(CountryCode.BY).toString(),
       sum: 0,
+      block: false,
     };
-    this.allAccount.push(newAcc);
-    return JSON.stringify(newAcc);
+    this.allAccounts.set(newAccount.name, newAccount);
+    console.log(`Создан новый счет: ${JSON.stringify(newAccount)}`);
+    return newAccount;
   }
 
   // перевод заданной суммы денег между двумя указанными
   public transferMoney(
-    firstAcc?: string,
-    secondAcc?: string,
+    firstAccount?: string,
+    secondAccount?: string,
     sum?: number,
     body?: string,
   ): void {
@@ -115,14 +125,20 @@ export class PaymentSystem {
     }
 
     if (argLength === 3) {
-      this.executTransaction(firstAcc!, secondAcc!, sum!);
-      return;
+      try {
+        this.executTransaction(firstAccount!, secondAccount!, sum!);
+      } catch (error) {
+        console.log(error.message);
+      }
     }
 
     if (argLength === 1) {
-      const { firstAcc, secondAcc, sum } = JSON.parse(body!);
-      this.executTransaction(firstAcc, secondAcc, sum);
-      return;
+      const { firstAccount, secondAccount, sum } = JSON.parse(body!);
+      try {
+        this.executTransaction(firstAccount!, secondAccount!, sum!);
+      } catch (error) {
+        console.log(error.message);
+      }
     }
   }
 }
@@ -130,5 +146,8 @@ export class PaymentSystem {
 const ps = new PaymentSystem(); // создание экземпляра класса платежной системы
 ps.getDestructionAccNum();
 ps.getEmissAccNum();
-for (let i = 0; i < 3; i++) ps.createNewAcc();
-ps.getAllAcc();
+ps.emissAddSum(300);
+for (let i = 0; i < 3; i++) ps.createNewAccount();
+ps.getAllAccount();
+ps.transferMoney('11', '22', 45);
+ps.destructionMoney('23', 900);
