@@ -6,13 +6,24 @@ type Account = {
   block: boolean;
 };
 
-export class PaymentSystem {
+interface IPaymentSystem {
+  getEmissAccountNumber(): string;
+  getDestructionAccountNumber(): string;
+  addEmission(sum: number): void;
+  destructMoney(accountName: string, sum: number): void;
+  createNewAccount(): Account;
+  transferMoney(firstAccount: string, secondAccount: string, sum: number): void;
+  transferMoneyJSON(body: string): void;
+  getAllAccounts(): string;
+}
+
+export class PaymentSystem implements IPaymentSystem {
   private emissAccount: Account = {
     name: 'BY04CBDC36029110100040000000',
     sum: 0,
     block: false,
   };
-  private destructionAcc: Account = {
+  private destructionAccount: Account = {
     name: 'BY04CBDC36029110100040000001',
     sum: 0,
     block: false,
@@ -23,14 +34,14 @@ export class PaymentSystem {
   constructor() {
     this.allAccounts = new Map();
     this.allAccounts.set(this.emissAccount.name, this.emissAccount);
-    this.allAccounts.set(this.destructionAcc.name, this.destructionAcc);
+    this.allAccounts.set(this.destructionAccount.name, this.destructionAccount);
   }
 
-  private checkAccount(accountName: string, sum?: number): Account {
+  private getAccountAndValidate(accountName: string, sum?: number): Account {
     const account = this.allAccounts.get(accountName);
 
     if (!account) {
-      throw new Error(`ОШИБКА: Cчета ${accountName} не существует`);
+      throw new Error(`ОШИБКА: Cчет ${accountName} не существует`);
     }
 
     if (!sum) {
@@ -46,54 +57,46 @@ export class PaymentSystem {
   }
 
   private executTransaction(
-    firstAccountName: string,
-    secondAccountName: string,
+    fromAccountNumber: string,
+    toAccountNumber: string,
     sum: number,
   ): void {
-    const firstAccount = this.checkAccount(firstAccountName, sum);
-    const secondAccount = this.checkAccount(secondAccountName, sum);
+    const firstAccount = this.getAccountAndValidate(fromAccountNumber, sum);
+    const secondAccount = this.getAccountAndValidate(toAccountNumber);
 
     firstAccount.sum -= sum;
     secondAccount.sum += sum;
-    console.log(
-      `Перевод денежных средств со счета ${firstAccount.name} на счет ${secondAccount.name} выполнен`,
-    );
   }
 
   // вывод в консоль специального номера счета для "эмиссии"
-  public getEmissAccNum(): void {
+  public getEmissAccountNumber(): string {
     console.log(
-      `Номер специального счета для "эмиссии": ${this.destructionAcc.name}`,
+      `Номер специального счета для "эмиссии": ${this.emissAccount.name}`,
     );
+    return this.emissAccount.name;
   }
 
   // вывод в консоль специального номера счета для "уничтожения"
-  public getDestructionAccNum(): void {
+  public getDestructionAccountNumber(): string {
     console.log(
-      `Номер специального счета для "уничтожения": ${this.destructionAcc.name}`,
+      `Номер специального счета для "уничтожения": ${this.destructionAccount.name}`,
     );
-  }
-
-  // получение всех счетов в формате JSON
-  public getAllAccount(): void {
-    const allAccounts: Account[] = [];
-    for (let account of this.allAccounts.values()) {
-      allAccounts.push(account);
-    }
-    console.log(JSON.stringify(allAccounts));
+    return this.destructionAccount.name;
   }
 
   // осуществление эмисси, по добавлению на счет “эмиссии” указанной суммы
-  public emissAddSum(sum: number): void {
-    this.allAccounts.get(this.emissAccount.name)!.sum += sum;
+  public addEmission(sum: number): void {
+    const emissAccount = this.allAccounts.get(this.emissAccount.name);
+    emissAccount.sum += sum;
   }
 
   // осуществление отправки определенной суммы денег с указанного счета на счет “уничтожения”
-  public destructionMoney(accountName: string, sum: number): void {
+  public destructMoney(accountName: string, sum: number): void {
     try {
-      const account = this.checkAccount(accountName, sum);
-      this.emissAccount.sum -= sum;
+      const account = this.getAccountAndValidate(accountName, sum);
+      if (accountName != this.emissAccount.name) this.emissAccount.sum -= sum;
       account.sum -= sum;
+      this.destructionAccount.sum += sum;
     } catch (error) {
       console.log(error.message);
     }
@@ -111,43 +114,51 @@ export class PaymentSystem {
     return newAccount;
   }
 
-  // перевод заданной суммы денег между двумя указанными
+  // перевод заданной суммы денег между двумя указанными счетами. Вариант с несколькими параметрами.
   public transferMoney(
-    firstAccount?: string,
-    secondAccount?: string,
-    sum?: number,
-    body?: string,
+    fromAccountNumber: string,
+    toAccountNumber: string,
+    sum: number,
   ): void {
-    const argLength = arguments.length;
-    if (argLength != 1 && argLength != 3) {
-      console.log('Не верные параметры');
-      return;
-    }
-
-    if (argLength === 3) {
-      try {
-        this.executTransaction(firstAccount!, secondAccount!, sum!);
-      } catch (error) {
-        console.log(error.message);
-      }
-    }
-
-    if (argLength === 1) {
-      const { firstAccount, secondAccount, sum } = JSON.parse(body!);
-      try {
-        this.executTransaction(firstAccount!, secondAccount!, sum!);
-      } catch (error) {
-        console.log(error.message);
-      }
+    try {
+      this.executTransaction(fromAccountNumber, toAccountNumber, sum);
+      console.log(
+        `Перевод денежных средств со счета ${fromAccountNumber} на счет ${toAccountNumber} выполнен`,
+      );
+    } catch (error) {
+      console.log(error.message);
     }
   }
-}
 
-const ps = new PaymentSystem(); // создание экземпляра класса платежной системы
-ps.getDestructionAccNum();
-ps.getEmissAccNum();
-ps.emissAddSum(300);
-for (let i = 0; i < 3; i++) ps.createNewAccount();
-ps.getAllAccount();
-ps.transferMoney('11', '22', 45);
-ps.destructionMoney('23', 900);
+  // перевод заданной суммы денег между двумя указанными счетами. Вариант с единственным параметром в формате json.
+  public transferMoneyJSON(body: string): void {
+    const { fromAccountNumber, toAccountNumber, sum } = JSON.parse(body);
+    this.transferMoney(fromAccountNumber, toAccountNumber, sum);
+  }
+
+  // получение всех счетов в формате JSON
+  public getAllAccounts(): string {
+    const allAccounts: Account[] = [];
+    for (let account of this.allAccounts.values()) {
+      allAccounts.push(account);
+    }
+    const allAccountsJSON = JSON.stringify(allAccounts);
+    console.log(allAccountsJSON);
+    return allAccountsJSON;
+  }
+
+  // для тестов
+  public getAccount(accountNumber: string): Account {
+    return this.allAccounts.get(accountNumber);
+  }
+
+  // для тестов
+  public getAccountBalance(accountNumber: string): number {
+    return this.getAccount(accountNumber).sum;
+  }
+
+  // для тестов
+  public blockAccount(accountNumber: string): void {
+    this.getAccount(accountNumber).block = true;
+  }
+}
