@@ -18,6 +18,9 @@
       "strictBindCallApply": false,
       "forceConsistentCasingInFileNames": false,
       "noFallthroughCasesInSwitch": false,
-      "downlevelIteration": true
+      "paths": {"*":[
+            "*",
+            "tests/*"
+         ]}
     }
   }
